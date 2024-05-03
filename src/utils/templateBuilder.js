@@ -1,4 +1,3 @@
-import capitalize from './capitalize';
 import stripDuplicates from './stripDuplicates';
 import octokit from '../octokit';
 
@@ -7,13 +6,13 @@ import { htmlEncoding } from './htmlEncoding';
 
 export const getTemplate = (userID, imageSize, name, avatarUrl) => {
     return `
-    <td align="center">
-        <a href="https://github.com/${userID}">
-            <img src="${avatarUrl}" width="${imageSize};" alt="${userID}"/>
-            <br />
-            <sub><b>${name ? name : userID}</b></sub>
-        </a>
-    </td>`;
+            <td align="center">
+                <a href="https://github.com/${userID}">
+                    <img src="${avatarUrl}" width="${imageSize};" alt="${userID}"/>
+                    <br />
+                    <sub><b>${name ? name : userID}</b></sub>
+                </a>
+            </td>`;
 };
 
 /**
@@ -31,15 +30,22 @@ export const getUserInfo = async (login, avatarUrl, prevContributors, useUserNam
             const {
                 data: { name, avatar_url }
             } = await octokit.rest.users.getByUsername({ username: login });
-            return { name: useUserName ? login : htmlEncoding(name), url: avatar_url };
+            // Use login (== username) when useUserName is true, otherwise try to use name. 
+            // Unless name is null, then fallback to login.
+            const finalName = (useUserName) ? login: (name) ? htmlEncoding(name) : login
+            return { name: finalName, url: avatar_url };
         } catch (error) {
             console.log(`Oops...given github id ${login} is invalid :(`);
             return { name: login, url: '' };
         }
     }
 
+    // Use login (== username) when useUserName is true, otherwise try to use name.
+    // If name is null, then fallback to login.
+    const finalName = (useUserName) ? login : (prevContributors[login] && prevContributors[login].name) ?
+        htmlEncoding(prevContributors[login].name) : login
     return {
-        name: useUserName ? login : htmlEncoding(prevContributors[login].name),
+        name: finalName,
         url: avatarUrl || prevContributors[login].url
     };
 };
@@ -57,14 +63,14 @@ const templateBuilder = async (contributors, prevContributors, type) => {
     const useUsername = getBooleanInput('use_username');
     const columns = Number(getInput('columns_per_row').trim());
 
-    let contributors_content = `<!-- readme:${type}-start -->\n<table>\n`;
+    let contributors_content = `<!-- readme:${type}-start -->\n<table>\n\t<tbody>\n`;
 
     contributors = stripDuplicates(contributors, 'login');
 
     const rows = Math.ceil(contributors.length / columns);
 
     for (let row = 1; row <= rows; row++) {
-        contributors_content += '<tr>';
+        contributors_content += '\t\t<tr>';
         for (
             let column = 1;
             column <= columns && (row - 1) * columns + column - 1 < contributors.length;
@@ -82,17 +88,17 @@ const templateBuilder = async (contributors, prevContributors, type) => {
                 contributors_content += getTemplate(
                     login,
                     imageSize,
-                    useUsername ? name : capitalize(name),
+                    name,
                     url
                 );
             } else {
                 contributors_content += getTemplate(login, imageSize, login, avatar_url);
             }
         }
-        contributors_content += '</tr>\n';
+        contributors_content += '\n\t\t</tr>\n';
     }
 
-    contributors_content += `</table>\n<!-- readme:${type}-end -->`;
+    contributors_content += `\t<tbody>\n</table>\n<!-- readme:${type}-end -->`;
 
     return contributors_content;
 };
